@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Monitor ESP32</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            color: #222;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: auto;
+            padding: 25px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        /* =========================
+           CONTROLES
+        ========================= */
+
+        .controles {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        button {
+            border: none;
+            padding: 12px 22px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+
+        #btnIniciar {
+            background: #2196f3;
+            color: white;
+        }
+
+        #btnNova {
+            background: #555;
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .tempo {
+            margin-top: 15px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .barra {
+            width: 100%;
+            height: 15px;
+            background: #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        #progresso {
+            width: 0%;
+            height: 100%;
+            background: #2196f3;
+            transition: width 0.2s;
+        }
+
+        /* =========================
+           CARDS
+        ========================= */
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .titulo {
+            font-size: 15px;
+            color: #777;
+            margin-bottom: 10px;
+        }
+
+        .valor {
+            font-size: 30px;
+            font-weight: bold;
+        }
+
+        .unidade {
+            font-size: 14px;
+            color: #777;
+        }
+
+        /* =========================
+           GRAFICOS
+        ========================= */
+
+        .grafico {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .grafico h2 {
+            margin-top: 0;
+        }
+
+        .canvas-container {
+            position: relative;
+            height: 400px;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        /* =========================
+           RESPONSIVO
+        ========================= */
+
+        @media (max-width: 800px) {
+
+            .cards {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+        }
+
+        @media (max-width: 500px) {
+
+            .cards {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                padding: 12px;
+            }
+
+        }
+
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>📊 Monitor ESP32</h1>
+
+    <!-- CONTROLES -->
+
+    <div class="controles">
+
+        <button id="btnIniciar" onclick="iniciarMedicao()">
+            ▶️ Iniciar medição
+        </button>
+
+        <button id="btnNova" onclick="novaMedicao()" disabled>
+            🔄 Nova medição
+        </button>
+
+        <div class="tempo">
+            ⏱️ <span id="tempo">0:00</span> / 2:00
+        </div>
+
+        <div class="barra">
+            <div id="progresso"></div>
+        </div>
+
+        <div class="status" id="status">
+            Aguardando medição...
+        </div>
+
+    </div>
+
+
+    <!-- CARDS -->
+
+    <div class="cards">
+
+        <div class="card">
+
+            <div class="titulo">
+                Movimento X
+            </div>
+
+            <div class="valor" id="valorX">
+                0
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="titulo">
+                Movimento Y
+            </div>
+
+            <div class="valor" id="valorY">
+                0
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="titulo">
+                Movimento Z
+            </div>
+
+            <div class="valor" id="valorZ">
+                0
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="titulo">
+                🌡️ Temperatura
+            </div>
+
+            <div class="valor" id="temperatura">
+                -- 
+            </div>
+
+            <div class="unidade">
+                °C
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="titulo">
+                💧 Umidade
+            </div>
+
+            <div class="valor" id="umidade">
+                --
+            </div>
+
+            <div class="unidade">
+                %
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- GRAFICO MOVIMENTO -->
+
+    <div class="grafico">
+
+        <h2>📈 Movimento do ADXL345</h2>
+
+        <div class="canvas-container">
+
+            <canvas id="graficoMovimento"></canvas>
+
+        </div>
+
+    </div>
+
+
+    <!-- GRAFICO TEMPERATURA -->
+
+    <div class="grafico">
+
+        <h2>🌡️ Temperatura</h2>
+
+        <div class="canvas-container">
+
+            <canvas id="graficoTemperatura"></canvas>
+
+        </div>
+
+    </div>
+
+
+    <!-- GRAFICO UMIDADE -->
+
+    <div class="grafico">
+
+        <h2>💧 Umidade</h2>
+
+        <div class="canvas-container">
+
+            <canvas id="graficoUmidade"></canvas>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+    // =====================================================
+    // CONFIGURAÇÃO
+    // =====================================================
+
+    const ESP32_IP = "http://192.168.0.188";
+
+    const DURACAO = 2 * 60 * 1000;
+
+    const INTERVALO = 200;
+
+
+    // =====================================================
+    // VARIÁVEIS
+    // =====================================================
+
+    let medindo = false;
+
+    let inicio = 0;
+
+    let timer = null;
+
+    let intervaloDados = null;
+
+
+    // =====================================================
+    // GRÁFICO MOVIMENTO
+    // =====================================================
+
+    const graficoMovimento = new Chart(
+        document.getElementById("graficoMovimento"),
+        {
+
+            type: "line",
+
+            data: {
+
+                labels: [],
+
+                datasets: [
+
+                    {
+                        label: "X",
+                        data: [],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.2
+                    },
+
+                    {
+                        label: "Y",
+                        data: [],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.2
+                    },
+
+                    {
+                        label: "Z",
+                        data: [],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.2
+                    }
+
+                ]
+
+            },
+
+            options: {
+
+                responsive: true,
+
+                maintainAspectRatio: false,
+
+                animation: false,
+
+                scales: {
+
+                    x: {
+
+                        title: {
+                            display: true,
+                            text: "Tempo da medição (%)"
+                        },
+
+                        min: 0,
+                        max: 100
+
+                    },
+
+                    y: {
+
+                        title: {
+                            display: true,
+                            text: "Valor do sensor"
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+    );
+
+
+    // =====================================================
+    // GRÁFICO TEMPERATURA
+    // =====================================================
+
+    const graficoTemperatura = new Chart(
+        document.getElementById("graficoTemperatura"),
+        {
+
+            type: "line",
+
+            data: {
+
+                labels: [],
+
+                datasets: [
+
+                    {
+                        label: "Temperatura (°C)",
+                        data: [],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.2
+                    }
+
+                ]
+
+            },
+
+            options: {
+
+                responsive: true,
+
+                maintainAspectRatio: false,
+
+                animation: false,
+
+                scales: {
+
+                    x: {
+
+                        title: {
+                            display: true,
+                            text: "Tempo da medição (%)"
+                        },
+
+                        min: 0,
+                        max: 100
+
+                    },
+
+                    y: {
+
+                        title: {
+                            display: true,
+                            text: "°C"
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+    );
+
+
+    // =====================================================
+    // GRÁFICO UMIDADE
+    // =====================================================
+
+    const graficoUmidade = new Chart(
+        document.getElementById("graficoUmidade"),
+        {
+
+            type: "line",
+
+            data: {
+
+                labels: [],
+
+                datasets: [
+
+                    {
+                        label: "Umidade (%)",
+                        data: [],
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.2
+                    }
+
+                ]
+
+            },
+
+            options: {
+
+                responsive: true,
+
+                maintainAspectRatio: false,
+
+                animation: false,
+
+                scales: {
+
+                    x: {
+
+                        title: {
+                            display: true,
+                            text: "Tempo da medição (%)"
+                        },
+
+                        min: 0,
+                        max: 100
+
+                    },
+
+                    y: {
+
+                        title: {
+                            display: true,
+                            text: "%"
+                        },
+
+                        min: 0,
+                        max: 100
+
+                    }
+
+                }
+
+            }
+
+        }
+    );
+
+
+    // =====================================================
+    // INICIAR MEDIÇÃO
+    // =====================================================
+
+    function iniciarMedicao() {
+
+        if (medindo) {
+            return;
+        }
+
+        medindo = true;
+
+        inicio = Date.now();
+
+        document.getElementById("btnIniciar").disabled = true;
+
+        document.getElementById("btnNova").disabled = true;
+
+        document.getElementById("status").innerText =
+            "🔴 Medição em andamento...";
+
+
+        limparGraficos();
+
+
+        atualizarTempo();
+
+        buscarDados();
+
+
+        intervaloDados = setInterval(
+            buscarDados,
+            INTERVALO
+        );
+
+        timer = setInterval(
+            atualizarTempo,
+            100
+        );
+
+    }
+
+
+    // =====================================================
+    // ATUALIZAR TEMPO
+    // =====================================================
+
+    function atualizarTempo() {
+
+        if (!medindo) {
+            return;
+        }
+
+        const decorrido = Date.now() - inicio;
+
+        const porcentagem =
+            Math.min(
+                decorrido / DURACAO * 100,
+                100
+            );
+
+
+        document.getElementById("progresso").style.width =
+            porcentagem + "%";
+
+
+        const segundos =
+            Math.floor(decorrido / 1000);
+
+
+        const minutos =
+            Math.floor(segundos / 60);
+
+
+        const segundosRestantes =
+            segundos % 60;
+
+
+        document.getElementById("tempo").innerText =
+            minutos +
+            ":" +
+            segundosRestantes
+                .toString()
+                .padStart(2, "0");
+
+
+        if (decorrido >= DURACAO) {
+
+            finalizarMedicao();
+
+        }
+
+    }
+
+
+    // =====================================================
+    // BUSCAR DADOS DO ESP32
+    // =====================================================
+
+    async function buscarDados() {
+
+        try {
+
+            const resposta =
+                await fetch(
+                    ESP32_IP + "/dados"
+                );
+
+
+            if (!resposta.ok) {
+                throw new Error("Erro HTTP");
+            }
+
+
+            const dados =
+                await resposta.json();
+
+
+            // -----------------------------
+            // CARDS
+            // -----------------------------
+
+            document.getElementById("valorX").innerText =
+                dados.x;
+
+            document.getElementById("valorY").innerText =
+                dados.y;
+
+            document.getElementById("valorZ").innerText =
+                dados.z;
+
+
+            document.getElementById("temperatura").innerText =
+                Number(dados.temperatura).toFixed(1);
+
+
+            document.getElementById("umidade").innerText =
+                Number(dados.umidade).toFixed(1);
+
+
+            // -----------------------------
+            // NÃO COLOCA NO GRÁFICO SE
+            // A MEDIÇÃO NÃO ESTIVER RODANDO
+            // -----------------------------
+
+            if (!medindo) {
+                return;
+            }
+
+
+            const decorrido =
+                Date.now() - inicio;
+
+
+            const porcentagem =
+                Math.min(
+                    decorrido / DURACAO * 100,
+                    100
+                );
+
+
+            const label =
+                porcentagem.toFixed(1);
+
+
+            // -----------------------------
+            // MOVIMENTO
+            // -----------------------------
+
+            graficoMovimento.data.labels.push(
+                label
+            );
+
+            graficoMovimento.data.datasets[0].data.push(
+                dados.x
+            );
+
+            graficoMovimento.data.datasets[1].data.push(
+                dados.y
+            );
+
+            graficoMovimento.data.datasets[2].data.push(
+                dados.z
+            );
+
+
+            // -----------------------------
+            // TEMPERATURA
+            // -----------------------------
+
+            graficoTemperatura.data.labels.push(
+                label
+            );
+
+            graficoTemperatura.data.datasets[0].data.push(
+                dados.temperatura
+            );
+
+
+            // -----------------------------
+            // UMIDADE
+            // -----------------------------
+
+            graficoUmidade.data.labels.push(
+                label
+            );
+
+            graficoUmidade.data.datasets[0].data.push(
+                dados.umidade
+            );
+
+
+            // -----------------------------
+            // ATUALIZA GRÁFICOS
+            // -----------------------------
+
+            graficoMovimento.update("none");
+
+            graficoTemperatura.update("none");
+
+            graficoUmidade.update("none");
+
+
+        } catch (erro) {
+
+            console.log(
+                "Erro ao buscar dados:",
+                erro
+            );
+
+        }
+
+    }
+
+
+    // =====================================================
+    // FINALIZAR
+    // =====================================================
+
+    function finalizarMedicao() {
+
+        if (!medindo) {
+            return;
+        }
+
+        medindo = false;
+
+
+        clearInterval(timer);
+
+        clearInterval(intervaloDados);
+
+
+        document.getElementById("progresso").style.width =
+            "100%";
+
+
+        document.getElementById("tempo").innerText =
+            "2:00";
+
+
+        document.getElementById("status").innerText =
+            "✅ Medição concluída!";
+
+
+        document.getElementById("btnNova").disabled =
+            false;
+
+    }
+
+
+    // =====================================================
+    // NOVA MEDIÇÃO
+    // =====================================================
+
+    function novaMedicao() {
+
+        clearInterval(timer);
+
+        clearInterval(intervaloDados);
+
+
+        limparGraficos();
+
+
+        document.getElementById("tempo").innerText =
+            "0:00";
+
+
+        document.getElementById("progresso").style.width =
+            "0%";
+
+
+        document.getElementById("status").innerText =
+            "Pronto para uma nova medição.";
+
+
+        document.getElementById("btnIniciar").disabled =
+            false;
+
+
+        document.getElementById("btnNova").disabled =
+            true;
+
+    }
+
+
+    // =====================================================
+    // LIMPAR GRÁFICOS
+    // =====================================================
+
+    function limparGraficos() {
+
+        // Movimento
+
+        graficoMovimento.data.labels = [];
+
+        graficoMovimento.data.datasets.forEach(
+            dataset => {
+                dataset.data = [];
+            }
+        );
+
+
+        // Temperatura
+
+        graficoTemperatura.data.labels = [];
+
+        graficoTemperatura.data.datasets[0].data = [];
+
+
+        // Umidade
+
+        graficoUmidade.data.labels = [];
+
+        graficoUmidade.data.datasets[0].data = [];
+
+
+        graficoMovimento.update("none");
+
+        graficoTemperatura.update("none");
+
+        graficoUmidade.update("none");
+
+    }
+
+</script>
+
+</body>
+</html>
